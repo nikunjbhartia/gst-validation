@@ -21,7 +21,11 @@ INNER JOIN ( SELECT
            LEFT JOIN tally_invoices t
                   ON g.gstin = t.gstin) gi
  ON ti.gstin = gi.gstin
--- AND split_part(ti.invoice_number,' / ',1) = gi.number
  AND TO_DATE(gi.date,'DD-MM-YYYY') = TO_DATE(ti.date,'YYYY-MM-DD')
  AND ROUND(CAST(ti.gross_total as FLOAT)) = ROUND(CAST(gi.value as FLOAT))
+     AND ( ltrim(split_part(ti.invoice_number,' / ',1),'0') = ltrim(gi.number,'0')
+         OR ltrim(split_part(split_part(ti.invoice_number,' / ',1), '/', 1),'0') = ltrim(split_part(gi.number,'/', 1),'0')
+         OR ltrim(split_part(split_part(ti.invoice_number,' / ',1), '/', -1),'0') = ltrim(split_part(gi.number,'/', -1),'0')
+         OR split_part(ti.invoice_number,' / ',1) LIKE '%' || gi.number || '%'
+         OR starts_with(split_part(ti.invoice_number,' / ',1), substring(gi.number,'[0-9]+')) )
 ORDER BY COALESCE(TO_DATE(gi.date,'DD-MM-YYYY'),TO_DATE(ti.date,'YYYY-MM-DD')), COALESCE(ti.gstin, gi.gstin);
