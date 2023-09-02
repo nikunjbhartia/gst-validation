@@ -1,0 +1,7 @@
+all_invoices.xlsx
+exports/portal/*
+exports/tally/*
+export/.DS_STORE
+.DS_STORE
+output/
+scratch.sh

@@ -1,10 +1,11 @@
-
+from datetime import datetime
+from openpyxl.styles import Font, PatternFill
 import csv
 import openpyxl
 import os
 import psycopg2
 import codecs
-
+import re
 
 # Local
 PG_DB = "returns"
@@ -138,7 +139,22 @@ def execute_postgres_sqls(list_of_sqls):
       conn.close()
       print("PostgreSQL connection is closed")
 
+def isequal_invoice_numbers(gst_num,tally_num):
+  is_eq = False
+  if gst_num and tally_num:
+    is_eq = (tally_num == gst_num) \
+            or (tally_num.lstrip('0') == gst_num.lstrip('0')) \
+            or (tally_num.split("/",1)[0].lstrip('0') == gst_num.split("/",1)[0].lstrip('0') ) \
+            or (tally_num.split("/",1)[-1].lstrip('0') == gst_num.split("/",1)[-1].lstrip('0')) \
+            or (tally_num.__contains__(gst_num)) \
+            or tally_num.startswith(re.findall('[0-9]+', gst_num)[0])
+
+  return is_eq
+
 def store_result_in_excel(filename,data,title):
+  if not os.path.exists(os.path.dirname(filename)):
+    os.makedirs(os.path.dirname(filename))
+
   if os.path.isfile(filename):
     wBook = openpyxl.load_workbook(filename)
     try:
@@ -149,9 +165,30 @@ def store_result_in_excel(filename,data,title):
     wBook = openpyxl.Workbook()
     sheet = wBook.create_sheet(title)
 
-  sheet.append(["tally_supplier","gstin","gst_date","tally_date", "gst_invoice_number","tally_invoice_number","tally_invoice_value","tally_gross_total","gst_invoice_value"])
+  sheet.append(["supplier","gstin","gst_date","tally_date", "gst_invoice_number","tally_invoice_number","tally_invoice_value","tally_gross_total","gst_invoice_value"])
   for row in data[0]:
     sheet.append(row)
+
+  header_font = Font(color='00FFFFFF',bold=True,size=20)
+  header_fill = PatternFill("solid", fgColor="003366FF")
+
+  # Enumerate the cells in the first row
+  for cell in sheet["1:1"]:
+    cell.font = header_font
+    cell.fill = header_fill
+
+  if 'Sheet' in wBook.sheetnames:
+    wBook.remove(wBook['Sheet'])
+
+  for row in sheet.iter_cols(min_row=2, min_col=1, max_row=sheet.max_row, max_col=sheet.max_column):
+    for cell in row:
+      cell.font = Font(size=20)
+
+  if title != "Not Matched Invoices":
+    for i in range(2, sheet.max_row):
+      if not isequal_invoice_numbers(sheet['E{}'.format(i)].value,sheet['F{}'.format(i)].value):
+        sheet['E{}'.format(i)].font = Font(size=20,color='00FF0000',bold=True)
+        sheet['F{}'.format(i)].font = Font(size=20,color='00FF0000',bold=True)
 
   wBook.save(filename)
 
@@ -168,21 +205,22 @@ if __name__ == "__main__":
   print(list_of_sqls)
 
   data = execute_postgres_sqls(list_of_sqls)
-  print(data)
+
+  output_filename = f"output{os.sep}validation_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
   print("Fetching all invoices records")
   data = execute_postgres_sqls(["SELECT * FROM all_invoices"])
-  print(data)
-  store_result_in_excel("all_invoices.xlsx",data,"All Invoices")
+
+  store_result_in_excel(output_filename,data,"All Invoices")
 
   print("Fetching all Matched records")
   data = execute_postgres_sqls(["SELECT * FROM invoices_matched"])
-  print(data)
-  store_result_in_excel("all_invoices.xlsx",data,"Matched Invoices")
+
+  store_result_in_excel(output_filename,data,"Matched Invoices")
 
   print("Fetching all Non Matched records")
   data = execute_postgres_sqls(["SELECT * FROM invoices_not_matched"])
-  print(data)
-  store_result_in_excel("all_invoices.xlsx",data,"Not Matched Invoices")
+
+  store_result_in_excel(output_filename,data,"Not Matched Invoices")
 
 
