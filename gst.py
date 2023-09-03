@@ -115,15 +115,15 @@ def execute_postgres_sqls(list_of_sqls):
     #Creating a cursor object using the cursor() method
     cursor = conn.cursor()
     data = []
-
+    colnames = []
     for sql in list_of_sqls:
       logging.info(f"Executing SQL: {sql}")
       cursor.execute(sql)
       conn.commit()
       if sql.startswith("SELECT"):
         data.append(cursor.fetchall())
-
-    return data
+        colnames = [desc[0] for desc in cursor.description]
+    return {"colnames": colnames, "data": data}
 
   except Exception as error:
     logging.info(error)
@@ -146,8 +146,10 @@ def isequal_invoice_numbers(gst_num,tally_num):
 
   return is_eq
 
-def store_result_in_excel(filename,data,title):
+def store_result_in_excel(filename,result,title):
   logging.info(f"Storing data for {title} in excel file {filename}")
+  data = result["data"]
+  colnames = result["colnames"]
   if os.path.isfile(filename):
     wBook = openpyxl.load_workbook(filename)
     try:
@@ -158,7 +160,8 @@ def store_result_in_excel(filename,data,title):
     wBook = openpyxl.Workbook()
     sheet = wBook.create_sheet(title)
 
-  sheet.append(["supplier","gstin","gst_date","tally_date", "gst_invoice_number","tally_invoice_number","tally_invoice_value","tally_gross_total","gst_invoice_value"])
+  # sheet.append(["supplier","gstin","gst_date","tally_date", "gst_invoice_number","tally_invoice_number","tally_invoice_value","tally_gross_total","gst_invoice_value"])
+  sheet.append(colnames)
   for row in data[0]:
     sheet.append(row)
 
@@ -177,7 +180,7 @@ def store_result_in_excel(filename,data,title):
     for cell in row:
       cell.font = Font(size=OUTPUT_FONT_SIZE)
 
-  if title != "Not Matched Invoices":
+  if title == "All Invoices":
     for i in range(2, sheet.max_row):
       if not isequal_invoice_numbers(sheet['E{}'.format(i)].value,sheet['F{}'.format(i)].value):
         sheet['E{}'.format(i)].font = Font(size=OUTPUT_FONT_SIZE,color='00FF0000',bold=True)
@@ -187,22 +190,33 @@ def store_result_in_excel(filename,data,title):
 
 if __name__ == "__main__":
   logging.info("Fetching all SQLs")
-  list_of_sqls = process_directory_files("DDLS",f"queries{os.sep}ddls" ) + \
+  list_of_sqls = [] + \
+    process_directory_files("DDLS",f"queries{os.sep}postgres{os.sep}ddls" ) + \
     process_directory_files("PORTAL",f"exports{os.sep}portal" ) + \
     process_directory_files("TALLY",f"exports{os.sep}tally" ) + \
-    process_directory_files("VALIDATION",f"queries{os.sep}postgres" )
+    process_directory_files("VALIDATION",f"queries{os.sep}postgres{os.sep}base_tables" ) + \
+    process_directory_files("STATS",f"queries{os.sep}postgres{os.sep}stats" )
+
   logging.info(f"List of All SQLs to be executed:- {os.linesep}{os.linesep.join(list_of_sqls)}")
   data = execute_postgres_sqls(list_of_sqls)
 
   logging.info("Fetching all Non Matched records")
-  data = execute_postgres_sqls(["SELECT * FROM invoices_not_matched"])
-  store_result_in_excel(RESULT_EXCEL_FILE,data,"Not Matched Invoices")
+  result = execute_postgres_sqls(["SELECT * FROM invoices_not_matched"])
+  store_result_in_excel(RESULT_EXCEL_FILE,result,"Not Matched Invoices")
+
+  logging.info("Fetching Not matched invoices stats")
+  result = execute_postgres_sqls(["SELECT * FROM not_matched_invoices_stats"])
+  store_result_in_excel(RESULT_EXCEL_FILE,result,"Not Matched Invoices Stats")
 
   logging.info("Fetching all Matched records")
-  data = execute_postgres_sqls(["SELECT * FROM invoices_matched"])
-  store_result_in_excel(RESULT_EXCEL_FILE,data,"Matched Invoices")
+  result = execute_postgres_sqls(["SELECT * FROM invoices_matched"])
+  store_result_in_excel(RESULT_EXCEL_FILE,result,"Matched Invoices")
 
   logging.info("Fetching all invoices records")
-  data = execute_postgres_sqls(["SELECT * FROM all_invoices"])
-  store_result_in_excel(RESULT_EXCEL_FILE,data,"All Invoices")
+  result = execute_postgres_sqls(["SELECT * FROM all_invoices"])
+  store_result_in_excel(RESULT_EXCEL_FILE,result,"All Invoices")
+
+  logging.info("Fetching all invoices stats")
+  result = execute_postgres_sqls(["SELECT * FROM all_invoices_stats"])
+  store_result_in_excel(RESULT_EXCEL_FILE,result,"All Invoices Stats")
 

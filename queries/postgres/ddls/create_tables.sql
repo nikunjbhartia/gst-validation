@@ -4,6 +4,8 @@ DROP TABLE IF EXISTS tally_invoices;
 DROP TABLE IF EXISTS all_invoices;
 DROP TABLE IF EXISTS invoices_matched;
 DROP TABLE IF EXISTS invoices_not_matched;
+DROP TABLE IF EXISTS not_matched_invoices_stats;
+DROP TABLE IF EXISTS all_invoices_stats;
 
 CREATE TABLE gst_invoices(
     gstin VARCHAR,
