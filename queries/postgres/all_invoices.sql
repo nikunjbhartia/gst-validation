@@ -1,4 +1,3 @@
-DROP TABLE IF EXISTS all_invoices;
 
 CREATE TABLE all_invoices AS
 SELECT

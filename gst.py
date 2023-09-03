@@ -6,16 +6,41 @@ import os
 import psycopg2
 import codecs
 import re
+import logging
+import sys
+
 
 # Local
-PG_DB = "returns"
+PG_DB = "tally"
 PG_HOST = "127.0.0.1"
 PG_PORT = 5432
-PG_USER = "root"
-PG_PWD = "root"
+PG_USER = "postgres"
+PG_PWD = "password"
+
+OUTPUT_FONT_SIZE=12
+def make_directories(filename):
+  if not os.path.exists(os.path.dirname(filename)):
+    os.makedirs(os.path.dirname(filename))
+
+EXECUTION_TIME=datetime.now().strftime("%Y%m%d_%H%M%S")
+LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
+LOG_FILE = LOG_DIR + "/" + EXECUTION_TIME + "_" + "gstvalidation.log"
+RESULT_EXCEL_FILE = f"output{os.sep}validation_result_{EXECUTION_TIME}.xlsx"
+
+make_directories(RESULT_EXCEL_FILE)
+make_directories(LOG_FILE)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)-15s %(levelname)s %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 def process_portal_csv(filepath):
-  print(f"Processing file: {filepath}")
+  logging.info(f"Processing file: {filepath}")
   with open(filepath, mode ='r') as file:
     # reading the CSV file
     csvFile = csv.reader(file)
@@ -34,9 +59,8 @@ def process_portal_csv(filepath):
 
     return None
 
-
 def process_tally_excel(filepath):
-  print(f"Processing file: {filepath}")
+  logging.info(f"Processing file: {filepath}")
   dataframe = openpyxl.load_workbook(filepath)
 
   # Define variable to read sheet
@@ -56,35 +80,6 @@ def process_tally_excel(filepath):
 
   return None
 
-def create_tally_table_ddls():
-  return [
-      "DROP TABLE IF EXISTS tally_invoices;",
-      """
-      CREATE TABLE tally_invoices(
-        date VARCHAR,
-        particulars VARCHAR,
-        supplier VARCHAR,
-        invoice_number VARCHAR,
-        gstin VARCHAR,
-        value VARCHAR,
-        gross_total VARCHAR
-      );
-      """
-  ]
-
-def create_invoices_table_ddls():
-  return [
-      "DROP TABLE IF EXISTS gst_invoices;",
-      """
-      CREATE TABLE gst_invoices(
-        gstin VARCHAR,
-        number VARCHAR,
-        date VARCHAR,
-        value VARCHAR
-      );
-      """
-  ]
-
 def read_sql_file(file):
   with codecs.open(file, mode='r', encoding='utf-8', buffering=-1) as sql_file:
     return sql_file.read()
@@ -102,7 +97,7 @@ def process_directory_files(type,directory):
         sqls.append(process_portal_csv(file))
       elif type == "TALLY" and filename.endswith(".xlsx"):
         sqls.append(process_tally_excel(file))
-      elif type == "VALIDATION" and filename.endswith(".sql"):
+      elif filename.endswith(".sql"):
         sqls.append(read_sql_file(file))
 
   return sqls
@@ -114,7 +109,7 @@ def execute_postgres_sqls(list_of_sqls):
     #                         "jdbc:postgresql://127.0.0.1:5432/returns",
     #                           ["root", "root"],
     #                         "postgresql-42.6.0.jar",)
-    # print("Database opened successfully")
+    # logging.info("Database opened successfully")
     #  The except block lets you handle the error.
 
     #Creating a cursor object using the cursor() method
@@ -122,7 +117,7 @@ def execute_postgres_sqls(list_of_sqls):
     data = []
 
     for sql in list_of_sqls:
-      print(f"Executing SQL: \n{sql}")
+      logging.info(f"Executing SQL: {sql}")
       cursor.execute(sql)
       conn.commit()
       if sql.startswith("SELECT"):
@@ -131,13 +126,13 @@ def execute_postgres_sqls(list_of_sqls):
     return data
 
   except Exception as error:
-    print(error)
+    logging.info(error)
 
   finally:
     if (conn):
       cursor.close()
       conn.close()
-      print("PostgreSQL connection is closed")
+      logging.info("PostgreSQL connection is closed")
 
 def isequal_invoice_numbers(gst_num,tally_num):
   is_eq = False
@@ -152,9 +147,7 @@ def isequal_invoice_numbers(gst_num,tally_num):
   return is_eq
 
 def store_result_in_excel(filename,data,title):
-  if not os.path.exists(os.path.dirname(filename)):
-    os.makedirs(os.path.dirname(filename))
-
+  logging.info(f"Storing data for {title} in excel file {filename}")
   if os.path.isfile(filename):
     wBook = openpyxl.load_workbook(filename)
     try:
@@ -169,7 +162,7 @@ def store_result_in_excel(filename,data,title):
   for row in data[0]:
     sheet.append(row)
 
-  header_font = Font(color='00FFFFFF',bold=True,size=20)
+  header_font = Font(color='00FFFFFF',bold=True,size=OUTPUT_FONT_SIZE)
   header_fill = PatternFill("solid", fgColor="003366FF")
 
   # Enumerate the cells in the first row
@@ -182,45 +175,34 @@ def store_result_in_excel(filename,data,title):
 
   for row in sheet.iter_cols(min_row=2, min_col=1, max_row=sheet.max_row, max_col=sheet.max_column):
     for cell in row:
-      cell.font = Font(size=20)
+      cell.font = Font(size=OUTPUT_FONT_SIZE)
 
   if title != "Not Matched Invoices":
     for i in range(2, sheet.max_row):
       if not isequal_invoice_numbers(sheet['E{}'.format(i)].value,sheet['F{}'.format(i)].value):
-        sheet['E{}'.format(i)].font = Font(size=20,color='00FF0000',bold=True)
-        sheet['F{}'.format(i)].font = Font(size=20,color='00FF0000',bold=True)
+        sheet['E{}'.format(i)].font = Font(size=OUTPUT_FONT_SIZE,color='00FF0000',bold=True)
+        sheet['F{}'.format(i)].font = Font(size=OUTPUT_FONT_SIZE,color='00FF0000',bold=True)
 
   wBook.save(filename)
 
 if __name__ == "__main__":
-  print('Create a database named "returns" if not present')
-
-  list_of_sqls = \
-    create_tally_table_ddls() + \
-    create_invoices_table_ddls() + \
+  logging.info("Fetching all SQLs")
+  list_of_sqls = process_directory_files("DDLS",f"queries{os.sep}ddls" ) + \
     process_directory_files("PORTAL",f"exports{os.sep}portal" ) + \
     process_directory_files("TALLY",f"exports{os.sep}tally" ) + \
     process_directory_files("VALIDATION",f"queries{os.sep}postgres" )
-
-  print(list_of_sqls)
-
+  logging.info(f"List of All SQLs to be executed:- {os.linesep}{os.linesep.join(list_of_sqls)}")
   data = execute_postgres_sqls(list_of_sqls)
 
-  output_filename = f"output{os.sep}validation_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-
-  print("Fetching all invoices records")
-  data = execute_postgres_sqls(["SELECT * FROM all_invoices"])
-
-  store_result_in_excel(output_filename,data,"All Invoices")
-
-  print("Fetching all Matched records")
-  data = execute_postgres_sqls(["SELECT * FROM invoices_matched"])
-
-  store_result_in_excel(output_filename,data,"Matched Invoices")
-
-  print("Fetching all Non Matched records")
+  logging.info("Fetching all Non Matched records")
   data = execute_postgres_sqls(["SELECT * FROM invoices_not_matched"])
+  store_result_in_excel(RESULT_EXCEL_FILE,data,"Not Matched Invoices")
 
-  store_result_in_excel(output_filename,data,"Not Matched Invoices")
+  logging.info("Fetching all Matched records")
+  data = execute_postgres_sqls(["SELECT * FROM invoices_matched"])
+  store_result_in_excel(RESULT_EXCEL_FILE,data,"Matched Invoices")
 
+  logging.info("Fetching all invoices records")
+  data = execute_postgres_sqls(["SELECT * FROM all_invoices"])
+  store_result_in_excel(RESULT_EXCEL_FILE,data,"All Invoices")
 

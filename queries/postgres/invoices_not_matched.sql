@@ -1,4 +1,3 @@
-DROP TABLE IF EXISTS invoices_not_matched;
 
 CREATE TABLE invoices_not_matched AS
 SELECT

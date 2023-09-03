@@ -3,5 +3,6 @@ exports/portal/*
 exports/tally/*
 export/.DS_STORE
 .DS_STORE
+logs/
 output/
 scratch.sh
