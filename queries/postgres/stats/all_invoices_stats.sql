@@ -4,7 +4,7 @@ SELECT
     gstin,
     SUM(COALESCE(tally_gross_total,0)) as all_tally_invoices_total,
     SUM(COALESCE(gst_invoice_value,0)) as all_gst_invoices_total,
-    ABS((SUM(COALESCE(tally_gross_total,0)) - SUM(COALESCE(gst_invoice_value,0)))) as tally_diff_gst_value,
+    (SUM(COALESCE(tally_gross_total,0)) - SUM(COALESCE(gst_invoice_value,0))) as tally_diff_gst_value,
     COALESCE(ABS(ROUND(CAST((SUM(COALESCE(tally_gross_total,0)) - SUM(COALESCE(gst_invoice_value,0)))*100/NULLIF(SUM(tally_gross_total),0) AS NUMERIC),1)),100) as ptg_diff
 FROM all_invoices
 GROUP BY supplier, gstin

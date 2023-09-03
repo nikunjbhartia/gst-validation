@@ -8,7 +8,7 @@ import codecs
 import re
 import logging
 import sys
-
+import platform
 
 # Local
 PG_DB = "tally"
@@ -17,7 +17,11 @@ PG_PORT = 5432
 PG_USER = "postgres"
 PG_PWD = "password"
 
-OUTPUT_FONT_SIZE=12
+if platform.system() == "Windows":
+  OUTPUT_FONT_SIZE=12
+else:
+  OUTPUT_FONT_SIZE=20
+
 def make_directories(filename):
   if not os.path.exists(os.path.dirname(filename)):
     os.makedirs(os.path.dirname(filename))
